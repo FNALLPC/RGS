@@ -34,6 +34,7 @@
 #include "TLeaf.h"
 #include "TTreeFormula.h"
 #include "TH1F.h"
+#include "TChain.h"
 #include "RGS.h"
 
 using namespace std;
@@ -142,11 +143,15 @@ bool slurpTable(string filename,
     {
       // We assume this is a ROOT ntuple since a tree name has been
       // given
-      TFile rfile(filename.c_str());
-      if ( !rfile.IsOpen() )
-	error("slurpTable - unable to open "+filename);
+ //      TFile rfile(filename.c_str());
+ //      if ( !rfile.IsOpen() )
+	// error("slurpTable - unable to open "+filename);
       
-      TTree* tree = (TTree*)rfile.Get(treename.c_str());
+      // TTree* tree = (TTree*)rfile.Get(treename.c_str());
+      if(filename.find("/eos/uscms/")!=string::npos) filename = string("root://cmseos.fnal.gov/")+filename.substr(10);
+      cout<<filename<<endl;
+      TChain* tree = new TChain("tEvent");
+      tree->Add(filename.c_str());
       if ( !tree )
 	error("slurpTable - unable to get tree "+treename);
       
@@ -189,24 +194,27 @@ bool slurpTable(string filename,
   
   if ( ntuple )
     {
-      // We assume this is a simple ROOT ntuple
-      TFile rfile(filename.c_str());
-      if ( !rfile.IsOpen() )
-	error("slurpTable - unable to open "+filename);
+ //      // We assume this is a simple ROOT ntuple
+ //      TFile rfile(filename.c_str());
+ //      if ( !rfile.IsOpen() )
+	// error("slurpTable - unable to open "+filename);
 
-      TTree* tree = (TTree*)rfile.Get(treename.c_str());
-      if ( !tree )
+      // TTree* tree = (TTree*)rfile.Get(treename.c_str());
+    if(filename.find("/eos/uscms/")!=string::npos) filename = string("root://cmseos.fnal.gov/")+filename.substr(10);
+    cout<<filename<<endl;
+     TChain* tree = new TChain("tEvent");
+      tree->Add(filename.c_str());
+      if ( !tree || tree->GetEntries()==0)
 	error("slurpTable - unable to get tree "+treename);
       
       tree->ResetBranchAddresses();
-            
       // Optionally, allow for event selection when using trees
       TTreeFormula* keep = 0;
       bool selectEvent = selection != "";
       if ( selectEvent ) 
 	keep = new TTreeFormula("selection", 
 				selection.c_str(), tree);
-      
+
       // Get branches
       TObjArray* branches = tree->GetListOfBranches();
       int nbranches = branches->GetEntries();
@@ -220,18 +228,23 @@ bool slurpTable(string filename,
 	  // Assume simple ntuple with leaf name = branch name
 	  TBranch* branch = (TBranch*)(branches->At(i));
 	  header.push_back(branch->GetName());
-	  
+    
 	  if ( header.back() == weightname ) weightindex = i;
 	  
 	  TLeaf* leaf = branch->GetLeaf(branch->GetName());
-
+      cout<<leaf<<" "<<branch->GetName()<<endl;
+      if(string(branch->GetName())==string("Track12Phi") || string(branch->GetName())==string("Track2Phi") ) continue;
+      if(string(branch->GetName())==string("Track12IsPixelStrips") || string(branch->GetName())==string("Track1IsPixelStrips") ) continue;
+    if(!leaf)continue;
 	  vtype[i] = leaf->GetTypeName()[0];
+    cout<<vtype[i]<<endl;
 	  if      ( vtype[i] == 'I' )
 	    tree->SetBranchAddress(header.back().c_str(), &ibuffer[i]);
 	  else if ( vtype[i] == 'F' )
 	    tree->SetBranchAddress(header.back().c_str(), &fbuffer[i]);
 	  else if ( vtype[i] == 'D' )
 	    tree->SetBranchAddress(header.back().c_str(), &dbuffer[i]);
+
 	}
 
       // Loop "count" entries, starting at start.
@@ -255,7 +268,7 @@ bool slurpTable(string filename,
 	    }
 	  // Cache row
 	  data.push_back(dbuffer);
-	  
+
 	  double w = fileweight;
 	  if ( weightindex > -1 ) w *= additionalWeight * dbuffer[weightindex];
 
